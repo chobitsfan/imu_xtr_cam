@@ -1,15 +1,26 @@
 #include <Wire.h>
 #include "SparkFun_BMI270_Arduino_Library.h"
 
+typedef struct __attribute__((packed)) {
+  uint32_t ts;
+  uint8_t xtr;
+  float ax;
+  float ay;
+  float az;
+  float gx;
+  float gy;
+  float gz;
+} Payload;
+
 // Create a new sensor object
 BMI270 imu;
 
 // SPI parameters
-uint8_t chipSelectPin = 5;
-uint32_t clockFrequency = 100000;
+const uint8_t chipSelectPin = 5;
+const uint32_t clockFrequency = 100000;
 
 // Pin used for interrupt detection
-int interruptPin = 3;
+const uint8_t interruptPin = 3;
 
 // Flag to know when interrupts occur
 volatile bool interruptOccurred = false;
@@ -17,11 +28,28 @@ volatile bool interruptOccurred = false;
 unsigned long exp_ts = 0;
 unsigned int cnt = 0;
 
+// CRC16-CCITT (0xFFFF)
+uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
+  uint16_t crc = 0xFFFF;
+  while (len--) {
+    crc ^= (uint16_t)(*data++) << 8;
+    for (uint8_t i = 0; i < 8; i++) {
+      if (crc & 0x8000)
+        crc = (crc << 1) ^ 0x1021;
+      else
+        crc <<= 1;
+    }
+  }
+  return crc;
+}
+
 void setup()
 {
     // Start serial
     Serial.begin(115200);
     Serial.println("BMI270 Example 4 - Filtering");
+
+    Serial1.begin(921600);
 
     pinMode(8, OUTPUT);
     digitalWrite(8, HIGH);
@@ -86,7 +114,7 @@ void setup()
     // Set accelerometer config
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
-    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_50HZ;
+    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_200HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;
     accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
@@ -95,7 +123,7 @@ void setup()
     // Set gyroscope config
     bmi2_sens_config gyroConfig;
     gyroConfig.type = BMI2_GYRO;
-    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_50HZ;
+    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_200HZ;
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.ois_range = BMI2_GYR_OIS_2000;
@@ -150,17 +178,38 @@ void loop()
         interruptOccurred = false;
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
-        if(interruptStatus & BMI2_GYR_DRDY_INT_MASK) {
+        if((interruptStatus & BMI2_GYR_DRDY_INT_MASK) && (interruptStatus & BMI2_ACC_DRDY_INT_MASK)) {
+            Payload dataToSend;
+            dataToSend.xtr = 0;
+            uint32_t ts = micros();
             cnt++;
-            if (cnt > 5) {
+            if (cnt > 9) {
                 cnt = 0;
                 digitalWrite(8, LOW);
-                exp_ts = millis();
+                exp_ts = ts;
+                dataToSend.xtr = 1;
+                //Serial.println("xtr");
             }
 
             // Get measurements from the sensor. This must be called before accessing
             // the sensor data, otherwise it will never update
             imu.getSensorData();
+
+            dataToSend.ts = ts;
+            dataToSend.ax = imu.data.accelX;
+            dataToSend.ay = imu.data.accelY;
+            dataToSend.az = imu.data.accelZ;
+            dataToSend.gx = imu.data.gyroX;
+            dataToSend.gy = imu.data.gyroY;
+            dataToSend.gz = imu.data.gyroZ;
+
+            uint16_t crc = crc16_ccitt((uint8_t*)&dataToSend, sizeof(Payload));
+
+            Serial1.write(0xaa);
+            Serial1.write(0x55);
+            Serial1.write((uint8_t*)&dataToSend, sizeof(Payload));
+            Serial1.write((uint8_t)(crc >> 8));   // CRC high byte
+            Serial1.write((uint8_t)(crc & 0xFF)); // CRC low byte
 
             // Print acceleration data
             /*Serial.print("Acceleration in g's");
@@ -189,7 +238,7 @@ void loop()
             Serial.println(imu.data.gyroZ, 3);*/
         }
     } else {
-        if (exp_ts > 0 && (millis() - exp_ts) > 10) {
+        if (exp_ts > 0 && (micros() - exp_ts) > 10000) {
             digitalWrite(8, HIGH);
             exp_ts = 0;
         }
