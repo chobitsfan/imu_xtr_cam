@@ -3,7 +3,7 @@
 
 typedef struct __attribute__((packed)) {
   uint32_t ts;
-  uint8_t xtr;
+  uint32_t sync_ts;
   float ax;
   float ay;
   float az;
@@ -16,14 +16,19 @@ typedef struct __attribute__((packed)) {
 BMI270 imu;
 
 // SPI parameters
-const uint8_t chipSelectPin = 5;
-const uint32_t clockFrequency = 100000;
+const uint8_t chipSelectPin = 17;
+const uint32_t clockFrequency = 1000000;
 
 // Pin used for interrupt detection
-const uint8_t interruptPin = 3;
+const uint8_t interruptPin = 15;
+const uint8_t sync_int_pin = 14;
+
+const uint8_t cam_xtr_pin = 13;
 
 // Flag to know when interrupts occur
 volatile bool interruptOccurred = false;
+
+volatile uint32_t sync_ts = 0;
 
 unsigned long exp_ts = 0;
 unsigned int cnt = 0;
@@ -45,14 +50,15 @@ uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
 
 void setup()
 {
+    delay(1000);
     // Start serial
     Serial.begin(115200);
     Serial.println("BMI270 Example 4 - Filtering");
 
     Serial1.begin(921600);
 
-    pinMode(8, OUTPUT);
-    digitalWrite(8, HIGH);
+    pinMode(cam_xtr_pin, OUTPUT);
+    digitalWrite(cam_xtr_pin, HIGH);
 
     // Initialize the SPI library
     SPI.begin();
@@ -166,7 +172,12 @@ void setup()
     intPinConfig.pin_cfg[0].input_en = BMI2_INT_INPUT_DISABLE;
     imu.setInterruptPinConfig(intPinConfig);
 
+    pinMode(interruptPin, INPUT);
+    //if (digitalPinToInterrupt(interruptPin) < 0) Serial.println("int do not work"); else Serial.println("int ok");
     attachInterrupt(digitalPinToInterrupt(interruptPin), myInterruptHandler, RISING);
+    //if (digitalPinToInterrupt(sync_int_pin) < 0) Serial.println("int2 do not work"); else Serial.println("int2 ok");
+    pinMode(sync_int_pin, INPUT);
+    attachInterrupt(digitalPinToInterrupt(sync_int_pin), sync_int_func, RISING);
 
     Serial.println("Configuration valid! Beginning measurements");
     delay(1000);
@@ -180,15 +191,12 @@ void loop()
         imu.getInterruptStatus(&interruptStatus);
         if((interruptStatus & BMI2_GYR_DRDY_INT_MASK) && (interruptStatus & BMI2_ACC_DRDY_INT_MASK)) {
             Payload dataToSend;
-            dataToSend.xtr = 0;
             uint32_t ts = micros();
             cnt++;
             if (cnt > 9) {
                 cnt = 0;
-                digitalWrite(8, LOW);
+                digitalWrite(cam_xtr_pin, LOW);
                 exp_ts = ts;
-                dataToSend.xtr = 1;
-                //Serial.println("xtr");
             }
 
             // Get measurements from the sensor. This must be called before accessing
@@ -196,6 +204,7 @@ void loop()
             imu.getSensorData();
 
             dataToSend.ts = ts;
+            dataToSend.sync_ts = sync_ts;
             dataToSend.ax = imu.data.accelX;
             dataToSend.ay = imu.data.accelY;
             dataToSend.az = imu.data.accelZ;
@@ -239,15 +248,18 @@ void loop()
         }
     } else {
         if (exp_ts > 0 && (micros() - exp_ts) > 10000) {
-            digitalWrite(8, HIGH);
+            digitalWrite(cam_xtr_pin, HIGH);
             exp_ts = 0;
         }
     }
-    // Print 50x per second
-    //delay(20);
 }
 
 void myInterruptHandler()
 {
     interruptOccurred = true;
+}
+
+void sync_int_func()
+{
+    sync_ts = micros();
 }
