@@ -17,7 +17,7 @@ BMI270 imu;
 
 // SPI parameters
 const uint8_t chipSelectPin = 17;
-const uint32_t clockFrequency = 1000000;
+const uint32_t clockFrequency = 5000000;
 
 // Pin used for interrupt detection
 const uint8_t interruptPin = 15;
@@ -176,8 +176,8 @@ void setup()
     //if (digitalPinToInterrupt(interruptPin) < 0) Serial.println("int do not work"); else Serial.println("int ok");
     attachInterrupt(digitalPinToInterrupt(interruptPin), myInterruptHandler, RISING);
     //if (digitalPinToInterrupt(sync_int_pin) < 0) Serial.println("int2 do not work"); else Serial.println("int2 ok");
-    pinMode(sync_int_pin, INPUT);
-    attachInterrupt(digitalPinToInterrupt(sync_int_pin), sync_int_func, RISING);
+    //pinMode(sync_int_pin, INPUT);
+    //attachInterrupt(digitalPinToInterrupt(sync_int_pin), sync_int_func, RISING);
 
     Serial.println("Configuration valid! Beginning measurements");
     delay(1000);
@@ -187,16 +187,17 @@ void loop()
 {
     if(interruptOccurred) {
         interruptOccurred = false;
+        uint32_t ts = micros();
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
         if((interruptStatus & BMI2_GYR_DRDY_INT_MASK) && (interruptStatus & BMI2_ACC_DRDY_INT_MASK)) {
-            Payload dataToSend;
-            uint32_t ts = micros();
+            Payload dataToSend = {0};
             cnt++;
             if (cnt > 9) {
                 cnt = 0;
                 digitalWrite(cam_xtr_pin, LOW);
                 exp_ts = ts;
+                dataToSend.sync_ts = ts;
             }
 
             // Get measurements from the sensor. This must be called before accessing
@@ -204,7 +205,6 @@ void loop()
             imu.getSensorData();
 
             dataToSend.ts = ts;
-            dataToSend.sync_ts = sync_ts;
             dataToSend.ax = imu.data.accelX;
             dataToSend.ay = imu.data.accelY;
             dataToSend.az = imu.data.accelZ;
@@ -259,7 +259,7 @@ void myInterruptHandler()
     interruptOccurred = true;
 }
 
-void sync_int_func()
+/*void sync_int_func()
 {
     sync_ts = micros();
-}
+}*/
