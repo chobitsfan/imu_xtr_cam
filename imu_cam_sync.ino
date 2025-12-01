@@ -27,7 +27,7 @@ const uint8_t cam_xtr_pin = 13;
 
 // Flag to know when interrupts occur
 volatile bool interruptOccurred = false;
-
+volatile unsigned int down_cnt = 0;
 volatile uint32_t sync_ts = 0;
 
 unsigned long exp_ts = 0;
@@ -120,7 +120,7 @@ void setup()
     // Set accelerometer config
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
-    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_200HZ;
+    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_1600HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;
     accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
@@ -129,7 +129,7 @@ void setup()
     // Set gyroscope config
     bmi2_sens_config gyroConfig;
     gyroConfig.type = BMI2_GYRO;
-    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_200HZ;
+    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_1600HZ;
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.ois_range = BMI2_GYR_OIS_2000;
@@ -185,12 +185,12 @@ void setup()
 
 void loop()
 {
+    uint32_t ts = micros();
     if(interruptOccurred) {
         interruptOccurred = false;
-        uint32_t ts = micros();
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
-        if((interruptStatus & BMI2_GYR_DRDY_INT_MASK) && (interruptStatus & BMI2_ACC_DRDY_INT_MASK)) {
+        if (interruptStatus & BMI2_GYR_DRDY_INT_MASK) {
             Payload dataToSend = {0};
             cnt++;
             if (cnt > 9) {
@@ -247,7 +247,7 @@ void loop()
             Serial.println(imu.data.gyroZ, 3);*/
         }
     } else {
-        if (exp_ts > 0 && (micros() - exp_ts) > 10000) {
+        if (exp_ts > 0 && (ts - exp_ts) > 10000) {
             digitalWrite(cam_xtr_pin, HIGH);
             exp_ts = 0;
         }
@@ -256,7 +256,11 @@ void loop()
 
 void myInterruptHandler()
 {
-    interruptOccurred = true;
+    down_cnt++;
+    if (down_cnt > 7) {
+        down_cnt = 0;
+        interruptOccurred = true;
+    }
 }
 
 /*void sync_int_func()
