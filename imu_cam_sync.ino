@@ -212,13 +212,12 @@ void loop()
             dataToSend.gy = imu.data.gyroY;
             dataToSend.gz = imu.data.gyroZ;
 
-            uint16_t crc = crc16_ccitt((uint8_t*)&dataToSend, sizeof(Payload));
-
-            Serial1.write(0xaa);
-            Serial1.write(0x55);
-            Serial1.write((uint8_t*)&dataToSend, sizeof(Payload));
-            Serial1.write((uint8_t)(crc >> 8));   // CRC high byte
-            Serial1.write((uint8_t)(crc & 0xFF)); // CRC low byte
+            uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+            memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+            uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+            my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+            my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+            Serial1.write(my_pkt, sizeof(my_pkt));
 
             // Print acceleration data
             /*Serial.print("Acceleration in g's");
