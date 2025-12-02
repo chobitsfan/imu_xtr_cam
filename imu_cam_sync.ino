@@ -18,20 +18,20 @@ BMI270 imu;
 // SPI parameters
 const uint8_t chipSelectPin = 17;
 const uint32_t clockFrequency = 5000000;
+const unsigned int acc_group_delay_us = 5400;
 
 // Pin used for interrupt detection
 const uint8_t interruptPin = 15;
 const uint8_t sync_int_pin = 14;
-
 const uint8_t cam_xtr_pin = 13;
 
 // Flag to know when interrupts occur
 volatile bool interruptOccurred = false;
-volatile unsigned int down_cnt = 0;
 volatile uint32_t sync_ts = 0;
 
 unsigned long exp_ts = 0;
 unsigned int cnt = 0;
+unsigned int shutter_spd_us = 10000;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -120,7 +120,7 @@ void setup()
     // Set accelerometer config
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
-    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_1600HZ;
+    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_200HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;
     accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
@@ -129,7 +129,7 @@ void setup()
     // Set gyroscope config
     bmi2_sens_config gyroConfig;
     gyroConfig.type = BMI2_GYRO;
-    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_1600HZ;
+    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_200HZ;
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.ois_range = BMI2_GYR_OIS_2000;
@@ -190,21 +190,21 @@ void loop()
         interruptOccurred = false;
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
-        if (interruptStatus & BMI2_GYR_DRDY_INT_MASK) {
+        if (interruptStatus & BMI2_ACC_DRDY_INT_MASK) {
             Payload dataToSend = {0};
             cnt++;
             if (cnt > 9) {
                 cnt = 0;
                 digitalWrite(cam_xtr_pin, LOW);
                 exp_ts = ts;
-                dataToSend.sync_ts = ts;
+                dataToSend.sync_ts = ts + shutter_spd_us / 2;
             }
 
             // Get measurements from the sensor. This must be called before accessing
             // the sensor data, otherwise it will never update
             imu.getSensorData();
 
-            dataToSend.ts = ts;
+            dataToSend.ts = ts - acc_group_delay_us;
             dataToSend.ax = imu.data.accelX;
             dataToSend.ay = imu.data.accelY;
             dataToSend.az = imu.data.accelZ;
@@ -246,21 +246,16 @@ void loop()
             Serial.print("Z: ");
             Serial.println(imu.data.gyroZ, 3);*/
         }
-    } else {
-        if (exp_ts > 0 && (ts - exp_ts) > 10000) {
-            digitalWrite(cam_xtr_pin, HIGH);
-            exp_ts = 0;
-        }
+    }
+    if (exp_ts > 0 && (ts - exp_ts) > shutter_spd_us) {
+        digitalWrite(cam_xtr_pin, HIGH);
+        exp_ts = 0;
     }
 }
 
 void myInterruptHandler()
 {
-    down_cnt++;
-    if (down_cnt > 7) {
-        down_cnt = 0;
-        interruptOccurred = true;
-    }
+    interruptOccurred = true;
 }
 
 /*void sync_int_func()
