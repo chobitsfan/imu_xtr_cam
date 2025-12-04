@@ -31,7 +31,7 @@ volatile uint32_t sync_ts = 0;
 
 unsigned long exp_ts = 0;
 unsigned int cnt = 0;
-unsigned int shutter_spd_us = 10000;
+uint16_t shutter_spd_us = 10000;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -249,6 +249,12 @@ void loop()
     if (exp_ts > 0 && (ts - exp_ts) > shutter_spd_us) {
         digitalWrite(cam_xtr_pin, HIGH);
         exp_ts = 0;
+    }
+    if (Serial1.available() >= 2 ) {
+        uint16_t spd;
+        Serial1.readBytes((uint8_t*)&spd, 2);
+        //Serial.println(spd);
+        if (spd > 0) shutter_spd_us = spd;
     }
 }
 
