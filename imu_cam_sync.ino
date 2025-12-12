@@ -27,12 +27,13 @@ const uint8_t cam_xtr_pin = 13;
 
 // Flag to know when interrupts occur
 volatile bool interruptOccurred = false;
-volatile uint32_t sync_ts = 0;
+volatile bool t_sync_int = false;
 
 unsigned long exp_ts = 0;
 unsigned int cnt = 0;
 uint16_t shutter_spd_us = 10000;
 uint32_t xtr_ts = 0;
+uint32_t last_tx_ts = 0;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -177,8 +178,8 @@ void setup()
     //if (digitalPinToInterrupt(interruptPin) < 0) Serial.println("int do not work"); else Serial.println("int ok");
     attachInterrupt(digitalPinToInterrupt(interruptPin), myInterruptHandler, RISING);
     //if (digitalPinToInterrupt(sync_int_pin) < 0) Serial.println("int2 do not work"); else Serial.println("int2 ok");
-    //pinMode(sync_int_pin, INPUT);
-    //attachInterrupt(digitalPinToInterrupt(sync_int_pin), sync_int_func, RISING);
+    pinMode(sync_int_pin, INPUT);
+    attachInterrupt(digitalPinToInterrupt(sync_int_pin), sync_int_func, RISING);
 
     Serial.println("Configuration valid! Beginning measurements");
     delay(1000);
@@ -192,7 +193,7 @@ void loop()
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
         if (interruptStatus & BMI2_ACC_DRDY_INT_MASK) {
-            Payload dataToSend = {0};
+            Payload dataToSend;
             cnt++;
             if (cnt > 9) {
                 cnt = 0;
@@ -218,6 +219,7 @@ void loop()
             my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
             Serial1.write(my_pkt, sizeof(my_pkt));
 
+            last_tx_ts = ts;
             // Print acceleration data
             /*Serial.print("Acceleration in g's");
             Serial.print("\t");
@@ -268,6 +270,19 @@ void loop()
         //Serial.println(spd);
         if (spd > 0) shutter_spd_us = spd;
     }
+    if (t_sync_int) {
+        t_sync_int = false;
+        Payload dataToSend = {0};
+        dataToSend.ts = ts;
+        dataToSend.ax = 1;
+        dataToSend.gx = 1;
+        uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+        memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+        uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+        my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+        my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+        Serial1.write(my_pkt, sizeof(my_pkt));
+    }
 }
 
 void myInterruptHandler()
@@ -275,7 +290,7 @@ void myInterruptHandler()
     interruptOccurred = true;
 }
 
-/*void sync_int_func()
+void sync_int_func()
 {
-    sync_ts = micros();
-}*/
+    t_sync_int = true;
+}
