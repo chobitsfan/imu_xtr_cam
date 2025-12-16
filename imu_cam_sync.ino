@@ -59,8 +59,7 @@ void setup()
     Serial.begin(115200);
     Serial.println("BMI270 Example 4 - Filtering");
 
-    Serial1.setRTS(3); // only 3, 5, 19, see https://www.circuitstate.com/pinouts/raspberry-pi-pico-rp2040-microcontroller-board-pinout-diagrams/
-    Serial1.setCTS(2);
+    Serial1.setCTS(2); // only gpio 2, 14, 18, see https://www.circuitstate.com/pinouts/raspberry-pi-pico-rp2040-microcontroller-board-pinout-diagrams/
     Serial1.begin(921600);
 
     pinMode(cam_xtr_pin, OUTPUT);
@@ -262,7 +261,7 @@ void loop()
         if (ts >= xtr_ts) {
             digitalWrite(cam_xtr_pin, LOW);
             xtr_ts = 0;
-        } else if (xtr_tx_cnt <= 3 && (ts - last_tx_ts > 1333) && Serial1.availableForWrite()) {
+        } else if (xtr_tx_cnt <= 3 && (ts - last_tx_ts > 333) && Serial1.availableForWrite()) {
             Payload dataToSend = {0};
             dataToSend.ts = mid_exp_ts;
             uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
@@ -287,6 +286,7 @@ void loop()
             Payload dataToSend = {0};
             dataToSend.ts = ts;
             dataToSend.ax = 1;
+            dataToSend.ay = 1;
             dataToSend.gx = 1;
             uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
             memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
