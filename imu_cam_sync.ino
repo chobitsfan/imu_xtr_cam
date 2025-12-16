@@ -33,9 +33,6 @@ unsigned long exp_ts = 0;
 unsigned int cnt = 0;
 uint16_t shutter_spd_us = 10000;
 uint32_t xtr_ts = 0;
-uint32_t last_tx_ts = 0;
-int xtr_tx_cnt = 0;
-uint32_t mid_exp_ts = 0;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -200,10 +197,16 @@ void loop()
             cnt++;
             if (cnt > 9) {
                 cnt = 0;
-                xtr_ts = ts + frame_intvl_us - acc_group_delay_us - shutter_spd_us / 2;
+                digitalWrite(cam_xtr_pin, LOW);
                 exp_ts = ts + shutter_spd_us;
-                mid_exp_ts = ts + shutter_spd_us / 2;
-                xtr_tx_cnt = 0;
+                Payload dataToSend = {0};
+                dataToSend.ts = ts + shutter_spd_us / 2;
+                uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+                memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+                uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+                my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+                my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+                Serial1.write(my_pkt, sizeof(my_pkt));
             }
 
             // Get measurements from the sensor. This must be called before accessing
@@ -225,7 +228,6 @@ void loop()
             my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
             Serial1.write(my_pkt, sizeof(my_pkt));
 
-            last_tx_ts = ts;
             // Print acceleration data
             /*Serial.print("Acceleration in g's");
             Serial.print("\t");
@@ -257,10 +259,11 @@ void loop()
         digitalWrite(cam_xtr_pin, HIGH);
         exp_ts = 0;
     }
-    if (xtr_ts > 0 ) {
+    /*if (xtr_ts > 0 ) {
         if (ts >= xtr_ts) {
             digitalWrite(cam_xtr_pin, LOW);
             xtr_ts = 0;
+            exp_ts = ts + shutter_spd_us;
         } else if (xtr_tx_cnt <= 3 && (ts - last_tx_ts > 333) && Serial1.availableForWrite()) {
             Payload dataToSend = {0};
             dataToSend.ts = mid_exp_ts;
@@ -273,7 +276,7 @@ void loop()
             last_tx_ts = ts;
             xtr_tx_cnt++;
         }
-    }
+    }*/
     if (Serial1.available() >= 2 ) {
         uint16_t spd;
         Serial1.readBytes((uint8_t*)&spd, 2);
