@@ -197,14 +197,13 @@ void loop()
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
         if (interruptStatus & BMI2_ACC_DRDY_INT_MASK) {
-            Payload dataToSend;
+            Payload dataToSend = {0};
             cnt++;
             if (cnt > 9) {
                 cnt = 0;
-#if 1
+#if 0
                 digitalWrite(cam_xtr_pin, LOW);
                 exp_ts = ts + exposure_us;
-                Payload dataToSend = {0};
                 dataToSend.ts = ts + exposure_us / 2;
                 uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
                 memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
@@ -216,18 +215,17 @@ void loop()
                 exposure_us_fixed = exposure_us;
                 uint32_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
                 xtr_ts = align_ts - exposure_us_fixed / 2;
-                Payload dataToSend = {0};
-                dataToSend.ts = align_ts;
+                /*dataToSend.ts = align_ts;
                 uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
                 memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
                 uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
                 my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
                 my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
-                Serial1.write(my_pkt, sizeof(my_pkt));
+                Serial1.write(my_pkt, sizeof(my_pkt));*/
 #endif
                 //Serial.print(ts);
                 //Serial.print(",");
-                //Serial.println(xtr_ts);
+                //Serial.println(align_ts);
             }
 
             // Get measurements from the sensor. This must be called before accessing
@@ -284,6 +282,14 @@ void loop()
         digitalWrite(cam_xtr_pin, LOW);
         xtr_ts = 0;
         exp_ts = ts + exposure_us_fixed;
+        Payload dataToSend = {0};
+        dataToSend.ts = ts + exposure_us_fixed / 2;
+        uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+        memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+        uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+        my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+        my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+        Serial1.write(my_pkt, sizeof(my_pkt));
         //Serial.println(exp_ts);
     }
     if (Serial1.available() >= 2 ) {
