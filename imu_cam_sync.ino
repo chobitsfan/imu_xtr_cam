@@ -37,6 +37,7 @@ unsigned int cnt = 0;
 unsigned int exposure_us = 10000;
 uint32_t xtr_ts = 0;
 unsigned int exposure_us_fixed;
+uint32_t hb_ts = 0;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -283,7 +284,8 @@ void loop()
         xtr_ts = 0;
         exp_ts = ts + exposure_us_fixed;
         Payload dataToSend = {0};
-        dataToSend.ts = ts + exposure_us_fixed / 2;
+        dataToSend.ts = ts;
+        dataToSend.az = exposure_us_fixed;
         uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
         memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
         uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
@@ -300,20 +302,32 @@ void loop()
     }
     if (t_sync_int) {
         t_sync_int = false;
-        /*if (Serial1.availableForWrite()) {
-            Payload dataToSend = {0};
-            dataToSend.ts = ts;
-            dataToSend.ax = 1;
-            dataToSend.ay = 1;
-            dataToSend.gx = 1;
-            uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
-            memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
-            uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
-            my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
-            my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
-            Serial1.write(my_pkt, sizeof(my_pkt));
-        }*/
+        Payload dataToSend = {0};
+        dataToSend.ts = ts;
+        dataToSend.ax = 1;
+        dataToSend.ay = 1;
+        dataToSend.gx = 1;
+        uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+        memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+        uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+        my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+        my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+        Serial1.write(my_pkt, sizeof(my_pkt));
     }
+    /*if (ts - hb_ts >= 3777779) { // we want hb interval a prime number
+        hb_ts = ts;
+        Payload dataToSend = {0};
+        dataToSend.ts = ts;
+        dataToSend.ax = 2;
+        dataToSend.ay = 2;
+        dataToSend.gx = 2;
+        uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+        memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+        uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+        my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+        my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+        Serial1.write(my_pkt, sizeof(my_pkt));
+    }*/
 }
 
 void myInterruptHandler()
