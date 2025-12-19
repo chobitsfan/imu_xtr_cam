@@ -295,10 +295,10 @@ void loop()
         //Serial.println(exp_ts);
     }
     if (Serial1.available() >= 2 ) {
-        uint16_t spd;
-        Serial1.readBytes((uint8_t*)&spd, 2);
-        //Serial.println(spd);
-        if (spd > 0) exposure_us = spd;
+        uint16_t exp_t;
+        if (Serial1.readBytes((uint8_t*)&exp_t, 2) == 2) {
+            if (exp_t >= 1000 && exp_t <= 40000) exposure_us = exp_t;
+        }
     }
     if (t_sync_int) {
         t_sync_int = false;
