@@ -294,10 +294,15 @@ void loop()
         Serial1.write(my_pkt, sizeof(my_pkt));
         //Serial.println(exp_ts);
     }
-    if (Serial1.available() >= 2 ) {
-        uint16_t exp_t;
-        if (Serial1.readBytes((uint8_t*)&exp_t, 2) == 2) {
-            if (exp_t >= 1000 && exp_t <= 40000) exposure_us = exp_t;
+    if (Serial1.available() >= 4 ) {
+        char data[4];
+        if (Serial1.readBytes(data, 4) == 4) {
+            uint16_t *exp_t_1 = (uint16_t*)&data[0];
+            uint16_t *exp_t_2 = (uint16_t*)&data[2];
+            //Serial.print(*exp_t_1);
+            //Serial.print(',');
+            //Serial.println(*exp_t_2);
+            if (*exp_t_1 == *exp_t_2 && *exp_t_1 >= 1000 && *exp_t_1 <= 40000) exposure_us = *exp_t_1;
         }
     }
     if (t_sync_int) {
