@@ -1,14 +1,16 @@
+#include <SparkFun_BMI270_Arduino_Library.h>
+
 #include <Wire.h>
 #include "SparkFun_BMI270_Arduino_Library.h"
 
 typedef struct __attribute__((packed)) {
   uint32_t ts;
-  float ax;
-  float ay;
-  float az;
-  float gx;
-  float gy;
-  float gz;
+  int16_t ax;
+  int16_t ay;
+  int16_t az;
+  int16_t gx;
+  int16_t gy;
+  int16_t gz;
 } Payload;
 
 // Create a new sensor object
@@ -234,12 +236,12 @@ void loop()
             imu.getSensorData();
 
             dataToSend.ts = ts - acc_group_delay_us;
-            dataToSend.ax = imu.data.accelX;
-            dataToSend.ay = imu.data.accelY;
-            dataToSend.az = imu.data.accelZ;
-            dataToSend.gx = imu.data.gyroX;
-            dataToSend.gy = imu.data.gyroY;
-            dataToSend.gz = imu.data.gyroZ;
+            dataToSend.ax = imu.data.accelRawX;
+            dataToSend.ay = imu.data.accelRawY;
+            dataToSend.az = imu.data.accelRawZ;
+            dataToSend.gx = imu.data.gyroRawX;
+            dataToSend.gy = imu.data.gyroRawY;
+            dataToSend.gz = imu.data.gyroRawZ;
 
             uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
             memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
@@ -302,7 +304,7 @@ void loop()
             //Serial.print(*exp_t_1);
             //Serial.print(',');
             //Serial.println(*exp_t_2);
-            if (*exp_t_1 == *exp_t_2 && *exp_t_1 >= 1000 && *exp_t_1 <= 40000) exposure_us = *exp_t_1;
+            if (*exp_t_1 == *exp_t_2 && *exp_t_1 >= 200 && *exp_t_1 <= 40000) exposure_us = *exp_t_1;
         }
     }
     if (t_sync_int) {
