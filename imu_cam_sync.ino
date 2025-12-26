@@ -5,6 +5,7 @@
 
 typedef struct __attribute__((packed)) {
   uint32_t ts;
+  uint16_t exp_us;
   int16_t ax;
   int16_t ay;
   int16_t az;
@@ -287,7 +288,7 @@ void loop()
         exp_ts = ts + exposure_us_fixed;
         Payload dataToSend = {0};
         dataToSend.ts = ts;
-        dataToSend.az = exposure_us_fixed;
+        dataToSend.exp_us = exposure_us_fixed;
         uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
         memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
         uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
