@@ -4,6 +4,7 @@
 typedef struct __attribute__((packed)) {
   uint32_t ts;
   uint16_t exp_us;
+  uint16_t seq;
   int16_t ax;
   int16_t ay;
   int16_t az;
@@ -38,7 +39,8 @@ unsigned int cnt = 0;
 unsigned int exposure_us = 10000;
 uint32_t xtr_ts = 0;
 unsigned int exposure_us_fixed;
-uint32_t hb_ts = 0;
+uint16_t seq = 0;
+//uint32_t hb_ts = 0;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -216,13 +218,14 @@ void loop()
             imu.getSensorData();
 
             dataToSend.ts = ts - acc_group_delay_us;
+            dataToSend.seq = seq;
+            seq++;
             dataToSend.ax = imu.data.accelRawX;
             dataToSend.ay = imu.data.accelRawY;
             dataToSend.az = imu.data.accelRawZ;
             dataToSend.gx = imu.data.gyroRawX;
             dataToSend.gy = imu.data.gyroRawY;
             dataToSend.gz = imu.data.gyroRawZ;
-
             uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
             memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
             uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
@@ -268,6 +271,8 @@ void loop()
         Payload dataToSend = {0};
         dataToSend.ts = ts;
         dataToSend.exp_us = exposure_us_fixed;
+        dataToSend.seq = seq;
+        seq++;
         uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
         memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
         uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
@@ -291,6 +296,8 @@ void loop()
         t_sync_int = false;
         Payload dataToSend = {0};
         dataToSend.ts = ts;
+        dataToSend.seq = seq;
+        seq++;
         dataToSend.ax = 1;
         dataToSend.ay = 1;
         dataToSend.gx = 1;
