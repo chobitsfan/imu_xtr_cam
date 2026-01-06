@@ -64,7 +64,7 @@ void setup()
     Serial.begin(115200);
     Serial.println("BMI270 Example 4 - Filtering");
 
-    Serial1.setCTS(2); // only gpio 2, 14, 18, see https://www.circuitstate.com/pinouts/raspberry-pi-pico-rp2040-microcontroller-board-pinout-diagrams/
+    //Serial1.setCTS(2); // only gpio 2, 14, 18, see https://www.circuitstate.com/pinouts/raspberry-pi-pico-rp2040-microcontroller-board-pinout-diagrams/
     Serial1.begin(921600);
 
     pinMode(cam_xtr_pin, OUTPUT);
@@ -232,32 +232,6 @@ void loop()
             my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
             my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
             Serial1.write(my_pkt, sizeof(my_pkt));
-
-            // Print acceleration data
-            /*Serial.print("Acceleration in g's");
-            Serial.print("\t");
-            Serial.print("X: ");
-            Serial.print(imu.data.accelX, 4);
-            Serial.print("\t");
-            Serial.print("Y: ");
-            Serial.print(imu.data.accelY, 4);
-            Serial.print("\t");
-            Serial.print("Z: ");
-            Serial.print(imu.data.accelZ, 4);
-
-            Serial.print("\t");
-
-            // Print rotation data
-            Serial.print("Rotation in deg/sec");
-            Serial.print("\t");
-            Serial.print("X: ");
-            Serial.print(imu.data.gyroX, 3);
-            Serial.print("\t");
-            Serial.print("Y: ");
-            Serial.print(imu.data.gyroY, 3);
-            Serial.print("\t");
-            Serial.print("Z: ");
-            Serial.println(imu.data.gyroZ, 3);*/
         }
     }
     if (exp_ts > 0 && ts >= exp_ts) {
