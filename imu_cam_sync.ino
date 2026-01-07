@@ -232,6 +232,8 @@ void loop()
             my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
             my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
             Serial1.write(my_pkt, sizeof(my_pkt));
+
+            //Serial.printf("imu %d %d %d %d %d %d\n", imu.data.accelRawX, imu.data.accelRawY, imu.data.accelRawZ, imu.data.gyroRawX, imu.data.gyroRawY, imu.data.gyroRawZ);
         }
     }
     if (exp_ts > 0 && ts >= exp_ts) {
