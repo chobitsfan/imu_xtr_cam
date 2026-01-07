@@ -1,6 +1,8 @@
 #include <Wire.h>
 #include "SparkFun_BMI270_Arduino_Library.h"
 
+#define MY_FIFO_NUM_SAMPLES 1
+
 typedef struct __attribute__((packed)) {
   uint32_t ts;
   uint16_t exp_us;
@@ -42,6 +44,8 @@ unsigned int exposure_us_fixed;
 uint16_t seq = 0;
 //uint32_t hb_ts = 0;
 
+BMI270_SensorData fifoData[MY_FIFO_NUM_SAMPLES];
+
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
   uint16_t crc = 0xFFFF;
@@ -59,7 +63,6 @@ uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
 
 void setup()
 {
-    delay(1000);
     // Start serial
     Serial.begin(115200);
     Serial.println("BMI270 Example 4 - Filtering");
@@ -147,6 +150,33 @@ void setup()
     gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
     err = imu.setConfig(gyroConfig);
 
+    imu.disableAdvancedPowerSave();
+
+    // Here we configure the FIFO buffer of the BMI270. Each of the config
+    // parameters are described below:
+    // 
+    // .flags           - Which features of the FIFO to enable. Only the
+    //                    accelerometer and gyroscope in headless mode is
+    //                    currently supported
+    // .watermark       - Number of data samples to store before triggering an
+    //                    interrupt
+    // .accelDownSample - Downsampling factor for the accelerometer, relative to
+    //                    the sensor's ODR (output data rate)
+    // .gyroDownSample  - Downsampling factor for the gyroscope, relative to the
+    //                    sensor's ODR (output data rate)
+    // .accelFilter     - Whether the accelerometer data is filtered
+    // .gyroFilter      - Whether the gyroscope data is filtered
+    // .selfWakeUp      - Whether FIFO can be read in low power mode
+    BMI270_FIFOConfig config;
+    config.flags = BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN;
+    config.watermark = MY_FIFO_NUM_SAMPLES;
+    config.accelDownSample = BMI2_FIFO_DOWN_SAMPLE_1;
+    config.gyroDownSample = BMI2_FIFO_DOWN_SAMPLE_1;
+    config.accelFilter = BMI2_ENABLE;
+    config.gyroFilter = BMI2_ENABLE;
+    config.selfWakeUp = BMI2_DISABLE;
+    err = imu.setFIFOConfig(config);
+
     // Check whether the config settings above were valid
     while(err != BMI2_OK)
     {
@@ -171,7 +201,7 @@ void setup()
         delay(1000);
     }
 
-    imu.mapInterruptToPin(BMI2_DRDY_INT, BMI2_INT1);
+    imu.mapInterruptToPin(BMI2_FWM_INT, BMI2_INT1);
 
     bmi2_int_pin_config intPinConfig;
     intPinConfig.pin_type = BMI2_INT1;
@@ -200,7 +230,7 @@ void loop()
         interruptOccurred = false;
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
-        if (interruptStatus & BMI2_ACC_DRDY_INT_MASK) {
+        if (interruptStatus & BMI2_FWM_INT_STATUS_MASK) {
             Payload dataToSend = {0};
             cnt++;
             if (cnt > 9) {
@@ -213,25 +243,41 @@ void loop()
                 //Serial.println(align_ts);
             }
 
-            // Get measurements from the sensor. This must be called before accessing
-            // the sensor data, otherwise it will never update
-            imu.getSensorData();
+            uint16_t data_avail = 0;
+            imu.getFIFOLengthBytes(&data_avail);
+            //Serial.println(data_avail);
+            if (data_avail > MY_FIFO_NUM_SAMPLES * 12) {
+                Serial.println(data_avail);
+                imu.flushFIFO();
+            } else {
+                // Get FIFO data from the sensor
+                uint16_t samplesRead = MY_FIFO_NUM_SAMPLES;
+                imu.getFIFOData(fifoData, &samplesRead);
 
-            dataToSend.ts = ts - acc_group_delay_us;
-            dataToSend.seq = seq;
-            seq++;
-            dataToSend.ax = imu.data.accelRawX;
-            dataToSend.ay = imu.data.accelRawY;
-            dataToSend.az = imu.data.accelRawZ;
-            dataToSend.gx = imu.data.gyroRawX;
-            dataToSend.gy = imu.data.gyroRawY;
-            dataToSend.gz = imu.data.gyroRawZ;
-            uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
-            memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
-            uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
-            my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
-            my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
-            Serial1.write(my_pkt, sizeof(my_pkt));
+                dataToSend.ts = ts - acc_group_delay_us;
+                dataToSend.seq = seq;
+                seq++;
+                dataToSend.ax = fifoData[0].accelRawX;
+                dataToSend.ay = fifoData[0].accelRawY;
+                dataToSend.az = fifoData[0].accelRawZ;
+                dataToSend.gx = fifoData[0].gyroRawX;
+                dataToSend.gy = fifoData[0].gyroRawY;
+                dataToSend.gz = fifoData[0].gyroRawZ;
+                uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
+                memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
+                uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
+                my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
+                my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
+                Serial1.write(my_pkt, sizeof(my_pkt));
+
+                //Serial.println("imu");
+                /*Serial.println(fifoData[0].accelRawX);
+                Serial.println(fifoData[0].accelRawY);
+                Serial.println(fifoData[0].accelRawZ);
+                Serial.println(fifoData[0].gyroRawX);
+                Serial.println(fifoData[0].gyroRawY);
+                Serial.println(fifoData[0].gyroRawZ);*/
+            }
         }
     }
     if (exp_ts > 0 && ts >= exp_ts) {
