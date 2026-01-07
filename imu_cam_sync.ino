@@ -45,6 +45,7 @@ uint16_t seq = 0;
 //uint32_t hb_ts = 0;
 
 BMI270_SensorData fifoData[MY_FIFO_NUM_SAMPLES];
+bool first_fifo_interrupt = true;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -231,28 +232,32 @@ void loop()
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
         if (interruptStatus & BMI2_FWM_INT_STATUS_MASK) {
-            Payload dataToSend = {0};
-            cnt++;
-            if (cnt > 9) {
-                cnt = 0;
-                exposure_us_fixed = exposure_us;
-                uint32_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
-                xtr_ts = align_ts - exposure_us_fixed / 2;
-                //Serial.print(ts);
-                //Serial.print(",");
-                //Serial.println(align_ts);
-            }
-
-            uint16_t data_avail = 0;
-            imu.getFIFOLengthBytes(&data_avail);
-            //Serial.println(data_avail);
-            if (data_avail > MY_FIFO_NUM_SAMPLES * 12) {
+            if (first_fifo_interrupt) {
+                first_fifo_interrupt = false;
+                uint16_t data_avail = 0;
+                imu.getFIFOLengthBytes(&data_avail);
                 Serial.println(data_avail);
                 imu.flushFIFO();
             } else {
+                Payload dataToSend = {0};
+                cnt++;
+                if (cnt > 9) {
+                    cnt = 0;
+                    exposure_us_fixed = exposure_us;
+                    uint32_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
+                    xtr_ts = align_ts - exposure_us_fixed / 2;
+                    //Serial.print(ts);
+                    //Serial.print(",");
+                    //Serial.println(align_ts);
+                }
+
                 // Get FIFO data from the sensor
                 uint16_t samplesRead = MY_FIFO_NUM_SAMPLES;
                 imu.getFIFOData(fifoData, &samplesRead);
+                if (samplesRead != MY_FIFO_NUM_SAMPLES) {
+                    Serial.print("Unexpected number of samples read from FIFO: ");
+                    Serial.println(samplesRead);
+                }
 
                 dataToSend.ts = ts - acc_group_delay_us;
                 dataToSend.seq = seq;
@@ -270,13 +275,7 @@ void loop()
                 my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
                 Serial1.write(my_pkt, sizeof(my_pkt));
 
-                //Serial.println("imu");
-                /*Serial.println(fifoData[0].accelRawX);
-                Serial.println(fifoData[0].accelRawY);
-                Serial.println(fifoData[0].accelRawZ);
-                Serial.println(fifoData[0].gyroRawX);
-                Serial.println(fifoData[0].gyroRawY);
-                Serial.println(fifoData[0].gyroRawZ);*/
+                //Serial.printf("imu %d %d %d %d %d %d\n", fifoData[0].accelRawX, fifoData[0].accelRawY, fifoData[0].accelRawZ, fifoData[0].gyroRawX, fifoData[0].gyroRawY, fifoData[0].gyroRawZ);
             }
         }
     }
