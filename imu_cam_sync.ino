@@ -147,6 +147,8 @@ void setup()
     gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
     err = imu.setConfig(gyroConfig);
 
+    err = imu.disableAdvancedPowerSave();
+
     // Check whether the config settings above were valid
     while(err != BMI2_OK)
     {
