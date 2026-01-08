@@ -151,6 +151,8 @@ void setup()
     gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
     err = imu.setConfig(gyroConfig);
 
+    //uint8_t features[] = {BMI2_ACCEL, BMI2_GYRO};
+    //imu.enableFeatures(features, 2);
     imu.disableAdvancedPowerSave();
 
     // Here we configure the FIFO buffer of the BMI270. Each of the config
@@ -275,7 +277,7 @@ void loop()
                 my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
                 Serial1.write(my_pkt, sizeof(my_pkt));
 
-                //Serial.printf("imu %d %d %d %d %d %d\n", fifoData[0].accelRawX, fifoData[0].accelRawY, fifoData[0].accelRawZ, fifoData[0].gyroRawX, fifoData[0].gyroRawY, fifoData[0].gyroRawZ);
+                //Serial.printf("imu %d %d %d %d %d %d\n", dataToSend.ax, dataToSend.ay, dataToSend.az, dataToSend.gx, dataToSend.gy, dataToSend.gz);
             }
         }
     }
