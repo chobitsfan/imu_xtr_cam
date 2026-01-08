@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include "SparkFun_BMI270_Arduino_Library.h"
 
-#define MY_FIFO_NUM_SAMPLES 1
+#define MY_FIFO_NUM_SAMPLES 2
 
 typedef struct __attribute__((packed)) {
   uint32_t ts;
@@ -21,8 +21,8 @@ BMI270 imu;
 // SPI parameters
 const uint8_t chipSelectPin = 17;
 const uint32_t clockFrequency = 5000000;
-const unsigned int acc_group_delay_us = 5400;
-const unsigned int imu_intvl_us = 4970; // 200hz, roughly observed
+const unsigned int acc_group_delay_us = 0;
+const unsigned int imu_intvl_us = 5000; // 200hz
 const unsigned int imu_odr = 200;
 const unsigned int fps = 20;
 const uint32_t frame_intvl_us = imu_intvl_us * (imu_odr / fps);
@@ -45,7 +45,6 @@ uint16_t seq = 0;
 //uint32_t hb_ts = 0;
 
 BMI270_SensorData fifoData[MY_FIFO_NUM_SAMPLES];
-bool first_fifo_interrupt = true;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -64,6 +63,7 @@ uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
 
 void setup()
 {
+    delay(1000);
     // Start serial
     Serial.begin(115200);
     Serial.println("BMI270 Example 4 - Filtering");
@@ -134,25 +134,31 @@ void setup()
     // Set accelerometer config
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
-    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_200HZ;
+    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_1600HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;
     accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
     err = imu.setConfig(accelConfig);
+    while(err != BMI2_OK) {
+        Serial.println("accel config failed");
+        delay(1000);
+    }
 
     // Set gyroscope config
     bmi2_sens_config gyroConfig;
     gyroConfig.type = BMI2_GYRO;
-    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_200HZ;
+    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_1600HZ;
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.ois_range = BMI2_GYR_OIS_2000;
     gyroConfig.cfg.gyr.range = BMI2_GYR_RANGE_2000;
     gyroConfig.cfg.gyr.noise_perf = BMI2_PERF_OPT_MODE;
     err = imu.setConfig(gyroConfig);
+    while(err != BMI2_OK) {
+        Serial.println("gyro config failed");
+        delay(1000);
+    }
 
-    //uint8_t features[] = {BMI2_ACCEL, BMI2_GYRO};
-    //imu.enableFeatures(features, 2);
     imu.disableAdvancedPowerSave();
 
     // Here we configure the FIFO buffer of the BMI270. Each of the config
@@ -173,34 +179,14 @@ void setup()
     BMI270_FIFOConfig config;
     config.flags = BMI2_FIFO_ACC_EN | BMI2_FIFO_GYR_EN;
     config.watermark = MY_FIFO_NUM_SAMPLES;
-    config.accelDownSample = BMI2_FIFO_DOWN_SAMPLE_1;
-    config.gyroDownSample = BMI2_FIFO_DOWN_SAMPLE_1;
-    config.accelFilter = BMI2_ENABLE;
-    config.gyroFilter = BMI2_ENABLE;
-    config.selfWakeUp = BMI2_DISABLE;
+    config.accelDownSample = BMI2_FIFO_DOWN_SAMPLE_8;
+    config.gyroDownSample = BMI2_FIFO_DOWN_SAMPLE_32;
+    config.accelFilter = BMI2_DISABLE;
+    config.gyroFilter = BMI2_DISABLE;
+    config.selfWakeUp = BMI2_ENABLE;
     err = imu.setFIFOConfig(config);
-
-    // Check whether the config settings above were valid
-    while(err != BMI2_OK)
-    {
-        // Not valid, determine which config was the problem
-        if(err == BMI2_E_ACC_INVALID_CFG)
-        {
-            Serial.println("Accelerometer config not valid!");
-        }
-        else if(err == BMI2_E_GYRO_INVALID_CFG)
-        {
-            Serial.println("Gyroscope config not valid!");
-        }
-        else if(err == BMI2_E_ACC_GYR_INVALID_CFG)
-        {
-            Serial.println("Both configs not valid!");
-        }
-        else
-        {
-            Serial.print("Unknown error: ");
-            Serial.println(err);
-        }
+    while(err != BMI2_OK) {
+        Serial.println("fifo config failed");
         delay(1000);
     }
 
@@ -223,7 +209,6 @@ void setup()
     attachInterrupt(digitalPinToInterrupt(sync_int_pin), sync_int_func, RISING);
 
     Serial.println("Configuration valid! Beginning measurements");
-    delay(1000);
 }
 
 void loop()
@@ -234,51 +219,45 @@ void loop()
         uint16_t interruptStatus = 0;
         imu.getInterruptStatus(&interruptStatus);
         if (interruptStatus & BMI2_FWM_INT_STATUS_MASK) {
-            if (first_fifo_interrupt) {
-                first_fifo_interrupt = false;
-                uint16_t data_avail = 0;
-                imu.getFIFOLengthBytes(&data_avail);
-                Serial.println(data_avail);
-                imu.flushFIFO();
-            } else {
-                Payload dataToSend = {0};
-                cnt++;
-                if (cnt > 9) {
-                    cnt = 0;
-                    exposure_us_fixed = exposure_us;
-                    uint32_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
-                    xtr_ts = align_ts - exposure_us_fixed / 2;
-                    //Serial.print(ts);
-                    //Serial.print(",");
-                    //Serial.println(align_ts);
-                }
+            Payload dataToSend = {0};
 
-                // Get FIFO data from the sensor
-                uint16_t samplesRead = MY_FIFO_NUM_SAMPLES;
-                imu.getFIFOData(fifoData, &samplesRead);
-                if (samplesRead != MY_FIFO_NUM_SAMPLES) {
-                    Serial.print("Unexpected number of samples read from FIFO: ");
-                    Serial.println(samplesRead);
-                }
+            // Get FIFO data from the sensor
+            uint16_t samplesRead = MY_FIFO_NUM_SAMPLES;
+            imu.getFIFOData(fifoData, &samplesRead);
+            if (samplesRead != MY_FIFO_NUM_SAMPLES) {
+                Serial.print("Unexpected number of samples read from FIFO: ");
+                Serial.println(samplesRead);
+            }
 
-                dataToSend.ts = ts - acc_group_delay_us;
+            cnt += samplesRead;
+            if (cnt > 9) {
+                cnt = 0;
+                exposure_us_fixed = exposure_us;
+                uint32_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
+                xtr_ts = align_ts - exposure_us_fixed / 2;
+                //Serial.print(ts);
+                //Serial.print(",");
+                //Serial.println(align_ts);
+            }
+
+            for (uint16_t i = 0; i < samplesRead; i++) {
+                dataToSend.ts = ts - acc_group_delay_us - imu_intvl_us * (samplesRead - i - 1);
                 dataToSend.seq = seq;
                 seq++;
-                dataToSend.ax = fifoData[0].accelRawX;
-                dataToSend.ay = fifoData[0].accelRawY;
-                dataToSend.az = fifoData[0].accelRawZ;
-                dataToSend.gx = fifoData[0].gyroRawX;
-                dataToSend.gy = fifoData[0].gyroRawY;
-                dataToSend.gz = fifoData[0].gyroRawZ;
+                dataToSend.ax = fifoData[i].accelRawX;
+                dataToSend.ay = fifoData[i].accelRawY;
+                dataToSend.az = fifoData[i].accelRawZ;
+                dataToSend.gx = fifoData[i].gyroRawX;
+                dataToSend.gy = fifoData[i].gyroRawY;
+                dataToSend.gz = fifoData[i].gyroRawZ;
                 uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
                 memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
                 uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
                 my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
                 my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
                 Serial1.write(my_pkt, sizeof(my_pkt));
-
-                //Serial.printf("imu %d %d %d %d %d %d\n", dataToSend.ax, dataToSend.ay, dataToSend.az, dataToSend.gx, dataToSend.gy, dataToSend.gz);
             }
+            //Serial.printf("imu %d %d %d %d %d %d\n", dataToSend.ax, dataToSend.ay, dataToSend.az, dataToSend.gx, dataToSend.gy, dataToSend.gz);
         }
     }
     if (exp_ts > 0 && ts >= exp_ts) {
