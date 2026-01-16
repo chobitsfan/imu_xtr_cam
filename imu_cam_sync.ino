@@ -2,15 +2,16 @@
 #include "SparkFun_BMI270_Arduino_Library.h"
 
 typedef struct __attribute__((packed)) {
-  uint32_t ts;
-  uint16_t exp_us;
-  uint16_t seq;
+  uint64_t ts;
+  uint8_t seq;
+  int8_t type;
   int16_t ax;
   int16_t ay;
   int16_t az;
   int16_t gx;
   int16_t gy;
   int16_t gz;
+  uint16_t exp_us;
 } Payload;
 
 // Create a new sensor object
@@ -19,7 +20,7 @@ BMI270 imu;
 // SPI parameters
 const uint8_t chipSelectPin = 17;
 const uint32_t clockFrequency = 5000000;
-const unsigned int acc_group_delay_us = 5400;
+const unsigned int acc_group_delay_us = (5400+5970)/2;
 const unsigned int imu_intvl_us = 4970; // 200hz, roughly observed
 const unsigned int imu_odr = 200;
 const unsigned int fps = 20;
@@ -34,13 +35,12 @@ const uint8_t cam_xtr_pin = 13;
 volatile bool interruptOccurred = false;
 volatile bool t_sync_int = false;
 
-uint32_t exp_ts = 0;
+uint64_t exp_ts = 0;
 unsigned int cnt = 0;
 unsigned int exposure_us = 10000;
-uint32_t xtr_ts = 0;
+uint64_t xtr_ts = 0;
 unsigned int exposure_us_fixed;
-uint16_t seq = 0;
-//uint32_t hb_ts = 0;
+uint8_t seq = 0;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -197,7 +197,7 @@ void setup()
 
 void loop()
 {
-    uint32_t ts = micros();
+    uint64_t ts = time_us_64();;
     if(interruptOccurred) {
         interruptOccurred = false;
         uint16_t interruptStatus = 0;
@@ -208,7 +208,7 @@ void loop()
             if (cnt > 9) {
                 cnt = 0;
                 exposure_us_fixed = exposure_us;
-                uint32_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
+                uint64_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
                 xtr_ts = align_ts - exposure_us_fixed / 2;
                 //Serial.print(ts);
                 //Serial.print(",");
@@ -222,6 +222,7 @@ void loop()
             dataToSend.ts = ts - acc_group_delay_us;
             dataToSend.seq = seq;
             seq++;
+            dataToSend.type = 0;
             dataToSend.ax = imu.data.accelRawX;
             dataToSend.ay = imu.data.accelRawY;
             dataToSend.az = imu.data.accelRawZ;
@@ -248,9 +249,10 @@ void loop()
         exp_ts = ts + exposure_us_fixed;
         Payload dataToSend = {0};
         dataToSend.ts = ts;
-        dataToSend.exp_us = exposure_us_fixed;
         dataToSend.seq = seq;
         seq++;
+        dataToSend.type = 1;
+        dataToSend.exp_us = exposure_us_fixed;
         uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
         memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
         uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
@@ -276,9 +278,7 @@ void loop()
         dataToSend.ts = ts;
         dataToSend.seq = seq;
         seq++;
-        dataToSend.ax = 1;
-        dataToSend.ay = 1;
-        dataToSend.gx = 1;
+        dataToSend.type = 2;
         uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
         memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
         uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
@@ -286,20 +286,6 @@ void loop()
         my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
         Serial1.write(my_pkt, sizeof(my_pkt));
     }
-    /*if (ts - hb_ts >= 3777779) { // we want hb interval a prime number
-        hb_ts = ts;
-        Payload dataToSend = {0};
-        dataToSend.ts = ts;
-        dataToSend.ax = 2;
-        dataToSend.ay = 2;
-        dataToSend.gx = 2;
-        uint8_t my_pkt[2 + sizeof(Payload) + 2] = {0xaa, 0x55};
-        memcpy(my_pkt + 2, &dataToSend, sizeof(Payload));
-        uint16_t crc = crc16_ccitt(my_pkt + 2, sizeof(Payload));
-        my_pkt[2 + sizeof(Payload)] = (uint8_t)(crc >> 8);   // CRC high byte
-        my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
-        Serial1.write(my_pkt, sizeof(my_pkt));
-    }*/
 }
 
 void myInterruptHandler()
