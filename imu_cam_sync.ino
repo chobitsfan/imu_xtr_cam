@@ -20,10 +20,10 @@ BMI270 imu;
 // SPI parameters
 const uint8_t chipSelectPin = 17;
 const uint32_t clockFrequency = 5000000;
-const unsigned int acc_group_delay_us = (5400+5970)/2;
-const unsigned int imu_intvl_us = 4970; // 200hz, roughly observed
-const unsigned int imu_odr = 200;
-const unsigned int fps = 20;
+const unsigned int acc_group_delay_us = (2000+3550)/2;
+const unsigned int imu_intvl_us = 2480; // 400hz, roughly observed
+const unsigned int imu_odr = 400;
+const unsigned int fps = 40;
 const uint32_t frame_intvl_us = imu_intvl_us * (imu_odr / fps);
 
 // Pin used for interrupt detection
