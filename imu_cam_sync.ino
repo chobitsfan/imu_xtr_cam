@@ -21,7 +21,7 @@ BMI270 imu;
 const uint8_t chipSelectPin = 17;
 const uint32_t clockFrequency = 5000000;
 const unsigned int acc_group_delay_us = (2000+3550)/2;
-const unsigned int imu_intvl_us = 2480; // 400hz, roughly observed
+const unsigned int imu_intvl_us = 2485; // 400hz, roughly observed
 const unsigned int imu_odr = 400;
 const unsigned int fps = 40;
 const uint32_t frame_intvl_us = imu_intvl_us * (imu_odr / fps);
@@ -41,6 +41,7 @@ unsigned int exposure_us = 10000;
 uint64_t xtr_ts = 0;
 unsigned int exposure_us_fixed;
 uint8_t seq = 0;
+//uint64_t prv_ts = 0;
 
 // CRC16-CCITT (0xFFFF)
 uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
@@ -130,7 +131,7 @@ void setup()
     // Set accelerometer config
     bmi2_sens_config accelConfig;
     accelConfig.type = BMI2_ACCEL;
-    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_200HZ;
+    accelConfig.cfg.acc.odr = BMI2_ACC_ODR_400HZ;
     accelConfig.cfg.acc.bwp = BMI2_ACC_NORMAL_AVG4;
     accelConfig.cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;
     accelConfig.cfg.acc.range = BMI2_ACC_RANGE_8G;
@@ -139,7 +140,7 @@ void setup()
     // Set gyroscope config
     bmi2_sens_config gyroConfig;
     gyroConfig.type = BMI2_GYRO;
-    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_200HZ;
+    gyroConfig.cfg.gyr.odr = BMI2_GYR_ODR_400HZ;
     gyroConfig.cfg.gyr.bwp = BMI2_GYR_NORMAL_MODE;
     gyroConfig.cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
     gyroConfig.cfg.gyr.ois_range = BMI2_GYR_OIS_2000;
@@ -236,6 +237,8 @@ void loop()
             my_pkt[2 + sizeof(Payload) + 1] = (uint8_t)(crc & 0xFF); // CRC low byte
             Serial1.write(my_pkt, sizeof(my_pkt));
 
+            //Serial.println(ts - prv_ts);
+            //prv_ts = ts;
             //Serial.printf("imu %d %d %d %d %d %d\n", imu.data.accelRawX, imu.data.accelRawY, imu.data.accelRawZ, imu.data.gyroRawX, imu.data.gyroRawY, imu.data.gyroRawZ);
         }
     }
