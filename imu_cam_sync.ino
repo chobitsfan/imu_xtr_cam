@@ -18,18 +18,18 @@ typedef struct __attribute__((packed)) {
 BMI270 imu;
 
 // SPI parameters
-const uint8_t chipSelectPin = 17;
-const uint32_t clockFrequency = 5000000;
-const unsigned int acc_group_delay_us = (2000+3550)/2;
-const unsigned int imu_intvl_us = 2485; // 400hz, roughly observed
-const unsigned int imu_odr = 400;
-const unsigned int fps = 40;
-const uint32_t frame_intvl_us = imu_intvl_us * (imu_odr / fps);
+constexpr uint8_t chipSelectPin = 17;
+constexpr uint32_t clockFrequency = 5000000;
+constexpr unsigned int gyro_group_delay_us = 3550;
+constexpr unsigned int imu_intvl_us = 2485; // 400hz, roughly observed
+constexpr unsigned int imu_odr = 400;
+constexpr unsigned int fps = 40;
+constexpr uint32_t frame_intvl_us = imu_intvl_us * (imu_odr / fps);
 
 // Pin used for interrupt detection
-const uint8_t interruptPin = 15;
-const uint8_t sync_int_pin = 14;
-const uint8_t cam_xtr_pin = 13;
+constexpr uint8_t interruptPin = 15;
+constexpr uint8_t sync_int_pin = 14;
+constexpr uint8_t cam_xtr_pin = 13;
 
 // Flag to know when interrupts occur
 volatile bool interruptOccurred = false;
@@ -209,7 +209,7 @@ void loop()
             if (cnt > 9) {
                 cnt = 0;
                 exposure_us_fixed = exposure_us;
-                uint64_t align_ts = ts - acc_group_delay_us + frame_intvl_us;
+                uint64_t align_ts = ts - gyro_group_delay_us + frame_intvl_us;
                 xtr_ts = align_ts - exposure_us_fixed / 2;
                 //Serial.print(ts);
                 //Serial.print(",");
@@ -220,7 +220,7 @@ void loop()
             // the sensor data, otherwise it will never update
             imu.getSensorData();
 
-            dataToSend.ts = ts - acc_group_delay_us;
+            dataToSend.ts = ts - gyro_group_delay_us;
             dataToSend.seq = seq;
             seq++;
             dataToSend.type = 0;
